@@ -115,4 +115,3 @@ void Descendente(int a[], int n) {
     printf("Resultado final (descendente): ");
     mostrarArray(a, n);
 }
-// FIN TRABAJO
