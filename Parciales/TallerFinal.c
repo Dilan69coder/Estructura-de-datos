@@ -38,21 +38,13 @@ int obtenerFactorEquilibrio(Inventario *lote) {
 
 Inventario* nuevoNodoInventario(int fecha, int unidades, const char* nombre) {
     Inventario* nodo = (Inventario*)malloc(sizeof(Inventario));
-    
-    if (nodo == NULL) {
-        perror("Error de asignación de memoria para Inventario");
-        exit(EXIT_FAILURE);
-    }
-
     nodo->fecha_vencimiento = fecha;
     nodo->stock_total = unidades; 
     strcpy(nodo->nombre_producto, nombre); 
-    
     nodo->izquierda = NULL;
     nodo->derecha = NULL;
     nodo->altura = 1; 
     nodo->cabeza_pedidos = NULL; 
-    
     return nodo;
 }
 
@@ -65,10 +57,9 @@ Inventario *buscarMasAntiguo(Inventario *nodo) {
 
 int contarPedidos(Pedido *cabeza) {
     int contador = 0;
-    Pedido *actual = cabeza;
-    while (actual != NULL) {
+    while (cabeza != NULL) {
         contador++;
-        actual = actual->siguiente;
+        cabeza = cabeza->siguiente;
     }
     return contador;
 }
@@ -115,19 +106,15 @@ Inventario *rotacionIzquierda(Inventario *NodoDesbalanceado) {
 
 Inventario* insertarNodoAVL(Inventario *nodo, int fecha, int unidades, const char *nombre) {
 
-    if (nodo == NULL) {
-        printf("Lote %d de %s con %d uds. registrado exitosamente.\n", fecha, nombre, unidades);
-        return nuevoNodoInventario(fecha, unidades, nombre); 
-    }
+    if (nodo == NULL)
+        return nuevoNodoInventario(fecha, unidades, nombre);
 
     if (fecha < nodo->fecha_vencimiento)
         nodo->izquierda = insertarNodoAVL(nodo->izquierda, fecha, unidades, nombre);
     else if (fecha > nodo->fecha_vencimiento)
         nodo->derecha = insertarNodoAVL(nodo->derecha, fecha, unidades, nombre);
-    else {
-        printf("Error: Ya existe un lote con la fecha %d.\n", fecha);
+    else
         return nodo;
-    }
 
     nodo->altura =
         (obtenerAltura(nodo->izquierda) > obtenerAltura(nodo->derecha) ?
@@ -158,10 +145,6 @@ Inventario* insertarNodoAVL(Inventario *nodo, int fecha, int unidades, const cha
 
 Pedido *nuevoNodoPedido(const char *destino, int unidades) {
     Pedido *nuevo = (Pedido *)malloc(sizeof(Pedido));
-    if (nuevo == NULL) {
-        perror("Error de asignación de memoria para Pedido");
-        exit(EXIT_FAILURE);
-    }
     strcpy(nuevo->nombre_destino, destino); 
     nuevo->cantidad_solicitada = unidades; 
     nuevo->siguiente = NULL;
@@ -170,10 +153,8 @@ Pedido *nuevoNodoPedido(const char *destino, int unidades) {
 
 void encolarPedido(Inventario *lote_prioritario, const char *destino, int unidades) {
 
-    if (lote_prioritario == NULL || unidades <= 0 || unidades > lote_prioritario->stock_total) {
-        printf("Error al registrar pedido.\n");
+    if (lote_prioritario == NULL || unidades <= 0 || unidades > lote_prioritario->stock_total)
         return;
-    }
 
     Pedido *nuevo = nuevoNodoPedido(destino, unidades);
 
@@ -192,10 +173,9 @@ void encolarPedido(Inventario *lote_prioritario, const char *destino, int unidad
 // 6. CANCELACIÓN (ELIMINACIONES)
 
 void liberarCola(Pedido *cabeza) {
-    Pedido *actual = cabeza;
-    while (actual != NULL) {
-        Pedido *tmp = actual;
-        actual = actual->siguiente;
+    while (cabeza != NULL) {
+        Pedido *tmp = cabeza;
+        cabeza = cabeza->siguiente;
         free(tmp);
     }
 }
@@ -218,28 +198,18 @@ Inventario *eliminarNodoAVL(Inventario *raiz, int fecha) {
         raiz->derecha = eliminarNodoAVL(raiz->derecha, fecha);
     else {
 
+        liberarCola(raiz->cabeza_pedidos);
+
         if (raiz->izquierda == NULL || raiz->derecha == NULL) {
-
-            liberarCola(raiz->cabeza_pedidos);
-
             Inventario *temp = raiz->izquierda ? raiz->izquierda : raiz->derecha;
-
-            if (temp == NULL) {
-                free(raiz);
-                return NULL;
-            } else {
-                *raiz = *temp;
-                free(temp);
-            }
-
+            free(raiz);
+            return temp;
         } else {
             Inventario *temp = valorMinimoNodo(raiz->derecha);
-
             raiz->fecha_vencimiento = temp->fecha_vencimiento;
             raiz->stock_total = temp->stock_total;
             strcpy(raiz->nombre_producto, temp->nombre_producto);
-            raiz->cabeza_pedidos = temp->cabeza_pedidos;
-
+            raiz->cabeza_pedidos = NULL;
             raiz->derecha = eliminarNodoAVL(raiz->derecha, temp->fecha_vencimiento);
         }
     }
@@ -272,6 +242,25 @@ Inventario *eliminarNodoAVL(Inventario *raiz, int fecha) {
     return raiz;
 }
 
+void cancelarPedido(Inventario *lote, const char *destino) {
+    Pedido *actual = lote->cabeza_pedidos;
+    Pedido *anterior = NULL;
+
+    while (actual != NULL) {
+        if (strcmp(actual->nombre_destino, destino) == 0) {
+            lote->stock_total += actual->cantidad_solicitada;
+            if (anterior == NULL)
+                lote->cabeza_pedidos = actual->siguiente;
+            else
+                anterior->siguiente = actual->siguiente;
+            free(actual);
+            return;
+        }
+        anterior = actual;
+        actual = actual->siguiente;
+    }
+}
+
 // 7. REPORTE IN-ORDER
 
 void recorridoInOrder(Inventario *raiz) {
@@ -290,15 +279,53 @@ void recorridoInOrder(Inventario *raiz) {
 
 int main() {
     Inventario *raiz = NULL;
+    int opcion;
 
-    raiz = insertarNodoAVL(raiz, 20251110, 500, "Leche");
-    raiz = insertarNodoAVL(raiz, 20260315, 1200, "Granos");
-    raiz = insertarNodoAVL(raiz, 20251125, 300, "Pescado");
-    raiz = insertarNodoAVL(raiz, 20260105, 850, "Atun");
-    raiz = insertarNodoAVL(raiz, 20251215, 400, "Tuberculos");
+    do {
+        printf("\n1. Recepción de Mercancía\n");
+        printf("2. Registrar Pedido de Despacho\n");
+        printf("3. Cancelaciones\n");
+        printf("4. Reporte de Estado\n");
+        printf("0. Salir\n");
+        scanf("%d", &opcion);
 
-    printf("FECHA VENC.  PRODUCTO      STOCK DISP  PEDIDOS\n");
-    recorridoInOrder(raiz);
+        if (opcion == 1) {
+            int fecha, cantidad;
+            char producto[40];
+            scanf("%d %s %d", &fecha, producto, &cantidad);
+            raiz = insertarNodoAVL(raiz, fecha, cantidad, producto);
+        }
+        else if (opcion == 2) {
+            char destino[40];
+            int cantidad;
+            Inventario *lote = buscarMasAntiguo(raiz);
+            if (lote != NULL) {
+                scanf("%s %d", destino, &cantidad);
+                encolarPedido(lote, destino, cantidad);
+            }
+        }
+        else if (opcion == 3) {
+            int sub;
+            scanf("%d", &sub);
+            if (sub == 1) {
+                int fecha;
+                scanf("%d", &fecha);
+                raiz = eliminarNodoAVL(raiz, fecha);
+            } else {
+                char destino[40];
+                Inventario *lote = buscarMasAntiguo(raiz);
+                if (lote != NULL) {
+                    scanf("%s", destino);
+                    cancelarPedido(lote, destino);
+                }
+            }
+        }
+        else if (opcion == 4) {
+            printf("FECHA VENC.  PRODUCTO      STOCK DISP  PEDIDOS\n");
+            recorridoInOrder(raiz);
+        }
+
+    } while (opcion != 0);
 
     return 0;
 }
